@@ -36,43 +36,67 @@ jobs:
             {"url": "https://github.com/frappe/webshop", "branch": "version-16"}
           ]' > apps.json
 
-      - name: Detetar caminhos dos Containerfiles
+      - name: Detectar Containerfiles
         id: detect
         working-directory: frappe_docker
+        shell: bash
         run: |
-          # Procura o Containerfile do Backend
-          WORKER_PATH=$(find images/custom -type f \( -name 'Containerfile' -o -name 'worker.Dockerfile' \) | head -n 1)
-          
-          # Procura o Containerfile do Frontend/Nginx
-          NGINX_PATH=$(find images/custom -type f \( -name '*nginx*Containerfile*' -o -name '*nginx*.Dockerfile' \) | head -n 1)
+          set -euo pipefail
+          WORKER_PATH="$(
+            find images -type f \( \
+              -name 'Containerfile' -o \
+              -name 'worker.Dockerfile' -o \
+              -name 'Dockerfile' \
+            \) | head -n 1
+          )"
 
-          # Fallback para os caminhos padrão mais recentes caso o find falhe
-          if [ -z "$WORKER_PATH" ]; then WORKER_PATH="images/custom/Containerfile"; fi
-          if [ -z "$NGINX_PATH" ]; then NGINX_PATH="images/custom/nginx/Containerfile"; fi
+          NGINX_PATH="$(
+            find images -type f \( \
+              -iname '*nginx*.Containerfile' -o \
+              -iname '*nginx*.Dockerfile' -o \
+              -iname 'nginx.Containerfile' -o \
+              -iname 'nginx.Dockerfile' \
+            \) | head -n 1
+          )"
 
-          echo "WORKER_FILE=$WORKER_PATH" >> $GITHUB_ENV
-          echo "NGINX_FILE=$NGINX_PATH" >> $GITHUB_ENV
+          if [ -z "$WORKER_PATH" ]; then
+            echo "Backend Containerfile not found."
+            find images -maxdepth 3 -type f -print
+            exit 1
+          fi
+
+          if [ -z "$NGINX_PATH" ]; then
+            echo "Nginx Containerfile not found in frappe_docker."
+            echo "Available image files:"
+            find images -maxdepth 4 -type f -print
+            exit 1
+          fi
+
+          echo "WORKER_FILE=$WORKER_PATH" >> "$GITHUB_ENV"
+          echo "NGINX_FILE=$NGINX_PATH" >> "$GITHUB_ENV"
+
           echo "Backend Containerfile: $WORKER_PATH"
           echo "Frontend Containerfile: $NGINX_PATH"
 
       - name: Compilar e Publicar Imagens
         working-directory: frappe_docker
+        shell: bash
         run: |
-          export APPS_JSON_BASE64=$(base64 -w 0 apps.json)
-          export REPO_OWNER=$(echo "${{ github.actor }}" | tr '[:upper:]' '[:lower:]')
-          
-          # Compilar o Backend
+          set -euo pipefail
+          export APPS_JSON_BASE64="$(base64 -w 0 apps.json)"
+          export REPO_OWNER="$(echo '${{ github.actor }}' | tr '[:upper:]' '[:lower:]')"
+
           docker build \
-            --build-arg=APPS_JSON_BASE64=$APPS_JSON_BASE64 \
-            --tag=ghcr.io/$REPO_OWNER/erpnext-backend:v16 \
-            --file=$WORKER_FILE .
-            
-          # Compilar o Frontend (Assets)
+            --build-arg "APPS_JSON_BASE64=$APPS_JSON_BASE64" \
+            --tag "ghcr.io/$REPO_OWNER/erpnext-backend:v16" \
+            --file "$WORKER_FILE" \
+            .
+
           docker build \
-            --build-arg=APPS_JSON_BASE64=$APPS_JSON_BASE64 \
-            --tag=ghcr.io/$REPO_OWNER/erpnext-frontend:v16 \
-            --file=$NGINX_FILE .
-            
-          # Enviar para o registo
-          docker push ghcr.io/$REPO_OWNER/erpnext-backend:v16
-          docker push ghcr.io/$REPO_OWNER/erpnext-frontend:v16
+            --build-arg "APPS_JSON_BASE64=$APPS_JSON_BASE64" \
+            --tag "ghcr.io/$REPO_OWNER/erpnext-frontend:v16" \
+            --file "$NGINX_FILE" \
+            .
+
+          docker push "ghcr.io/$REPO_OWNER/erpnext-backend:v16"
+          docker push "ghcr.io/$REPO_OWNER/erpnext-frontend:v16"
