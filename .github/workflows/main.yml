@@ -1,0 +1,59 @@
+name: Compilar ERPNext com Webshop
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login no GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Descarregar codigo base oficial
+        uses: actions/checkout@v4
+        with:
+          repository: frappe/frappe_docker
+          ref: main
+          path: frappe_docker
+
+      - name: Definir Webshop e dependencias
+        run: |
+          cd frappe_docker
+          echo '[
+            {"url": "https://github.com/frappe/erpnext", "branch": "version-16"},
+            {"url": "https://github.com/frappe/payments", "branch": "version-16"},
+            {"url": "https://github.com/frappe/webshop", "branch": "version-16"}
+          ]' > apps.json
+
+      - name: Compilar e Publicar Imagens
+        run: |
+          cd frappe_docker
+          export APPS_JSON_BASE64=$(base64 -w 0 apps.json)
+          export REPO_OWNER=$(echo "${{ github.actor }}" | tr '[:upper:]' '[:lower:]')
+          
+          # Compilar o Backend
+          docker build \
+            --build-arg=APPS_JSON_BASE64=$APPS_JSON_BASE64 \
+            --tag=ghcr.io/$REPO_OWNER/erpnext-backend:v16 \
+            --file=images/custom/worker.Dockerfile .
+            
+          # Compilar o Frontend (Assets)
+          docker build \
+            --build-arg=APPS_JSON_BASE64=$APPS_JSON_BASE64 \
+            --tag=ghcr.io/$REPO_OWNER/erpnext-frontend:v16 \
+            --file=images/custom/nginx.Dockerfile .
+            
+          # Enviar para o seu registo gratuito
+          docker push ghcr.io/$REPO_OWNER/erpnext-backend:v16
+          docker push ghcr.io/$REPO_OWNER/erpnext-frontend:v16
