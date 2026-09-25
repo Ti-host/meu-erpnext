@@ -46,14 +46,14 @@ jobs:
           docker build \
             --build-arg=APPS_JSON_BASE64=$APPS_JSON_BASE64 \
             --tag=ghcr.io/$REPO_OWNER/erpnext-backend:v16 \
-            --file=images/custom/worker.Dockerfile .
+            --file=images/custom/Containerfile .
             
           # Compilar o Frontend (Assets)
           docker build \
             --build-arg=APPS_JSON_BASE64=$APPS_JSON_BASE64 \
             --tag=ghcr.io/$REPO_OWNER/erpnext-frontend:v16 \
-            --file=images/custom/nginx.Dockerfile .
+            --file=images/custom/nginx.Containerfile .
             
-          # Enviar para o seu registo gratuito
+          # Enviar para o registo
           docker push ghcr.io/$REPO_OWNER/erpnext-backend:v16
           docker push ghcr.io/$REPO_OWNER/erpnext-frontend:v16
